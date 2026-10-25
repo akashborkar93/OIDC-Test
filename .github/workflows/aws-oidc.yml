@@ -1,10 +1,6 @@
-
-name: Connect GitHub Actions to AWS using OIDC
+name: Show OIDC claims
 
 on:
-  push:
-    branches:
-      - main
   workflow_dispatch:
 
 permissions:
@@ -12,18 +8,19 @@ permissions:
   contents: read
 
 jobs:
-  aws-authentication:
+  claims:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Configure AWS credentials using OIDC
-        uses: aws-actions/configure-aws-credentials@v6.3.0
-        with:
-          role-to-assume: arn:aws:iam::076586969151:role/GitHubActionsOIDCRole
-          aws-region: us-east-1
-
-      - name: Verify AWS connection
-        run: aws sts get-caller-identity
+      - name: Print the claims AWS will evaluate
+        run: |
+          python3 - <<'PY'
+          import base64, json, os, urllib.request
+          url = os.environ["ACTIONS_ID_TOKEN_REQUEST_URL"] + "&audience=sts.amazonaws.com"
+          request = urllib.request.Request(url, headers={"Authorization": "Bearer " + os.environ["ACTIONS_ID_TOKEN_REQUEST_TOKEN"]})
+          token = json.load(urllib.request.urlopen(request))["value"]
+          payload = token.split(".")[1]
+          payload += "=" * (-len(payload) % 4)
+          claims = json.loads(base64.urlsafe_b64decode(payload))
+          for key in ("iss", "aud", "sub", "repository", "repository_id", "repository_owner_id", "ref", "event_name"):
+              print(f"{key}: {claims.get(key)}")
+          PY
